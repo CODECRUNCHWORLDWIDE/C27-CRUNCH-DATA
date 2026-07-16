@@ -1,0 +1,63 @@
+# Exercise 04 — dbt source freshness (sources.yml) to complete.
+#
+# GOAL
+#   Configure `dbt source freshness` on the raw `orders` and `products` sources
+#   so a stale upstream WARNS or ERRORS — the freshness gate at the source
+#   boundary (Lecture 3 section 2). The SLAs come from the data contract:
+#   orders lands within 2h (warn at 1h); products is a slow dimension.
+#
+# PLACE THIS FILE AT
+#   models/sources.yml
+#
+# RUN
+#   dbt source freshness
+#   # PASS / WARN / ERROR per table; exits non-zero on an ERROR so an Airflow
+#   # task running this command HALTS the pipeline (Lecture 3 section 2.1).
+#
+# WHAT TO COMPLETE
+#   Every `# TODO`. Then prove it: artificially age the orders source (e.g.
+#   stop loading it, or set loaded_at back) and confirm `dbt source freshness`
+#   reports ERROR and exits non-zero.
+#
+# DELIVERABLE
+#   A `dbt source freshness` run showing PASS on fresh data and ERROR on aged
+#   data, plus the non-zero exit code captured (echo $?).
+
+version: 2
+
+sources:
+  - name: raw
+    description: "Raw landing zone tables fed by the ingestion ETL."
+    database: analytics          # adjust to your DuckDB/warehouse target
+    schema: raw
+
+    # Source-level defaults (each table inherits unless it overrides).
+    # TODO: set the column that carries the per-row load time.
+    #   loaded_at_field: loaded_at
+    # TODO: set the default SLA (warn after 1h, error after 2h):
+    #   freshness:
+    #     warn_after: {count: 1, period: hour}
+    #     error_after: {count: 2, period: hour}
+
+    tables:
+      - name: orders
+        description: "Raw order lines. Grain (order_id, line_number)."
+        # TODO: orders has a TIGHTER SLA than the default — override it:
+        #   freshness:
+        #     warn_after: {count: 30, period: minute}
+        #     error_after: {count: 90, period: minute}
+        # (loaded_at_field is inherited from the source default.)
+
+      - name: products
+        description: "Slowly-changing product dimension; updated weekly."
+        # TODO: products is a slow dimension. Turn its freshness check OFF so it
+        #       does not false-alarm:
+        #   freshness: null
+
+      - name: customers
+        description: "Customer master; daily snapshot."
+        # TODO: customers should be no older than a day. Override:
+        #   loaded_at_field: snapshot_at
+        #   freshness:
+        #     warn_after: {count: 18, period: hour}
+        #     error_after: {count: 26, period: hour}

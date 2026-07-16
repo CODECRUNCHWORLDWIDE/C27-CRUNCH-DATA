@@ -1,0 +1,114 @@
+# Exercise 03 — dbt mart tests (schema.yml) to complete.
+#
+# GOAL
+#   Gate the `fct_orders` fact and the `daily_revenue` mart with dbt tests
+#   covering every dimension from Lecture 1, using the built-in generic tests
+#   plus dbt_utils and dbt_expectations. Pick the right severity for each.
+#
+# PREREQUISITES
+#   Your Week 5 dbt project on DuckDB. Add the packages and install them:
+#     # packages.yml
+#     packages:
+#       - package: dbt-labs/dbt_utils
+#         version: [">=1.1.0", "<2.0.0"]
+#       - package: calogica/dbt_expectations
+#         version: [">=0.10.0", "<0.11.0"]
+#     $ dbt deps
+#
+# PLACE THIS FILE AT
+#   models/marts/schema.yml
+#
+# RUN
+#   dbt build                       # runs models AND tests; severity:error halts
+#   dbt test --select fct_orders    # just this model's tests
+#
+# WHAT TO COMPLETE
+#   Every `# TODO`. When done, `dbt build` should pass on clean data and a
+#   deliberately corrupted seed should fail the matching test.
+#
+# DELIVERABLE
+#   A passing `dbt build` on clean data; a note listing which test each
+#   corruption tripped and at which severity.
+
+version: 2
+
+models:
+  - name: fct_orders
+    description: "One row per order line. Grain: (order_id, line_number)."
+    # model-level tests (operate on the whole table)
+    data_tests:
+      # TODO: compound uniqueness on the grain.
+      #   - dbt_utils.unique_combination_of_columns:
+      #       combination_of_columns: ['order_id', 'line_number']
+      # TODO: a business invariant — total_cents must never be negative.
+      #   - dbt_utils.expression_is_true:
+      #       expression: "total_cents >= 0"
+      []
+    columns:
+      - name: order_id
+        description: "Stable order identifier."
+        data_tests:
+          # TODO: not_null (completeness) at severity error.
+          # - not_null
+          []
+
+      - name: line_number
+        data_tests:
+          # TODO: not_null.
+          []
+
+      - name: customer_id
+        description: "FK to dim_customer."
+        data_tests:
+          # TODO: not_null.
+          # TODO: relationships to ref('dim_customer'), field customer_id.
+          #       Set severity: warn (a missing FK is a soft signal here).
+          #   - relationships:
+          #       to: ref('dim_customer')
+          #       field: customer_id
+          #       config:
+          #         severity: warn
+          []
+
+      - name: status
+        data_tests:
+          # TODO: accepted_values for PLACED/SHIPPED/DELIVERED/CANCELLED.
+          #   - accepted_values:
+          #       values: ['PLACED', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+          []
+
+      - name: total_cents
+        data_tests:
+          # TODO: dbt_expectations range 0..10_000_000, graduated severity:
+          #   - dbt_expectations.expect_column_values_to_be_between:
+          #       min_value: 0
+          #       max_value: 10000000
+          #       config:
+          #         severity: error
+          #         error_if: ">100"   # halt only if >100 rows out of range
+          #         warn_if: ">0"      # warn on any
+          []
+
+  - name: daily_revenue
+    description: "Daily revenue rollup. One row per (revenue_date)."
+    data_tests:
+      # TODO: freshness as a test — the mart must contain a row from the last day.
+      #   - dbt_expectations.expect_row_values_to_have_recent_data:
+      #       column: revenue_date
+      #       datepart: day
+      #       interval: 1
+      []
+    columns:
+      - name: revenue_date
+        data_tests:
+          # TODO: unique + not_null (one row per day).
+          []
+      - name: revenue_cents
+        data_tests:
+          # TODO: dbt_utils.accepted_range min_value: 0
+          #       (store_failures: true so you can inspect any negative-revenue days).
+          #   - dbt_utils.accepted_range:
+          #       min_value: 0
+          #       config:
+          #         store_failures: true
+          []
