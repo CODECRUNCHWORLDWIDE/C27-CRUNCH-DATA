@@ -323,6 +323,19 @@ Marts materialize as **tables** because analysts query them constantly and you d
 
 Each layer is independently testable: you test that staging cleaned the data, that intermediate composed it correctly, and that the mart has the right grain and keys. Each transformation is a small, reviewable diff instead of one 200-line monster. And the DAG reads top to bottom — sources → staging → intermediate → marts — so the lineage graph is legible. A new engineer can open `dbt docs serve`, click `fct_orders`, and trace it back to the raw source without reading a line of Python. That legibility is the entire return on the discipline.
 
+```mermaid
+flowchart LR
+  RC["source raw customers"] --> SC["stg_customers"]
+  RO["source raw orders"] --> SO["stg_orders"]
+  ROI["source raw order_items"] --> SOI["stg_order_items"]
+  SC --> DC["dim_customer"]
+  SO --> IOE["int_orders_enriched"]
+  SOI --> IOE
+  IOE --> FO["fct_orders"]
+  DC --> FO
+```
+*Sources flow through staging into intermediate composition and finally into the dimensional marts.*
+
 ---
 
 ## 7. A first end-to-end run

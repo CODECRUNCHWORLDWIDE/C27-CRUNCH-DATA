@@ -76,6 +76,16 @@ Picture three daily runs against a source that grows each day. The watermark sta
 
 Each run reads only its slice. Total rows read across three runs equals the total rows in the source — no row is read twice, and (crucially) no row is *loaded* twice, because even if a row were re-read, the upsert in section 4 would make the re-load a no-op.
 
+```mermaid
+stateDiagram-v2
+  [*] --> Epoch
+  Epoch --> Day1 : Run 1 reads greater than epoch
+  Day1 --> Day2 : Run 2 reads greater than day1
+  Day2 --> Day3 : Run 3 reads greater than day2
+  Day3 --> [*]
+```
+*The watermark advances one committed slice at a time across successive runs.*
+
 ## 4. The idempotent upsert — INSERT ... ON CONFLICT DO UPDATE
 
 The watermark makes the load *incremental*. The upsert makes it *idempotent*. The difference between idempotent and not is the difference between `x = 5` (apply it five times, still 5) and `x += 5` (apply it five times, now 25). A plain `INSERT` is `+=`: re-loading a row appends a duplicate. An upsert is `=`: re-loading a row overwrites it.
@@ -210,6 +220,16 @@ Now a `kill -9` at any instant leaves the system in one of exactly two consisten
         crash before COMMIT ──► both roll back ──► re-run reads same slice ──► upsert = no-op ──► correct
         crash after  COMMIT ──► both persisted  ──► re-run reads next slice ──────────────────► correct
 ```
+
+```mermaid
+flowchart TD
+  A["Begin one transaction"] --> B["Upsert batch into target"]
+  B --> C["Advance watermark"]
+  C --> D{"Crash before commit"}
+  D -->|Yes| E["Both roll back - rerun reads same slice - upsert is a no-op"]
+  D -->|No| F["Both persisted - next run reads the next slice"]
+```
+*A crash inside the shared transaction leaves only two consistent outcomes, never a watermark that lies.*
 
 ## 7. Why double-counting happens — and the three ways it does not, here
 

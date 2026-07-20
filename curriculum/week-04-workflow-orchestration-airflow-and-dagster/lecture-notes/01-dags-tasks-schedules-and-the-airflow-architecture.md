@@ -116,6 +116,14 @@ Set `schedule="@daily"` and `start_date=2026-06-01`. Airflow defines a sequence 
 
 This is the right behavior, and once you see why, it is obvious: if you are loading "all of June 18th's sales," you cannot do that *during* June 18th — the day is not over. So Airflow waits for the interval to close, then runs the job that processes the just-closed interval. The job for the 18th runs on the 19th.
 
+```mermaid
+flowchart LR
+  A["Interval opens Jun 18 00:00"] --> B["Interval closes Jun 19 00:00"]
+  B --> C["Run fires after close"]
+  C --> D["Run owns the Jun 18 window"]
+```
+*A run does not fire during its interval — it fires once that interval has closed.*
+
 ### 3.2 The variables that name the window
 
 Inside any task, Airflow injects these (in `context`, or by name in TaskFlow):
@@ -252,6 +260,18 @@ The **metadata DB** is the source of truth. Every DAG run, every task-instance s
 ### 5.4 The webserver and the triggerer
 
 The **webserver** is the UI at `http://localhost:8080`: the grid view, the graph view, logs, manual triggers, and the backfill controls. It only *reads and renders* metadata-DB state and lets you issue commands; it runs no task code. The **triggerer** is a separate process that runs *deferrable* operators and sensors efficiently (Lecture 2 §2.3) — it lets a sensor "wait" without holding a worker slot.
+
+```mermaid
+flowchart LR
+  DAGFiles["DAG files"] --> Scheduler
+  Scheduler --> Executor
+  Executor --> Workers
+  Scheduler --> DB["Metadata DB"]
+  Executor --> DB
+  DB --> Webserver["Webserver UI"]
+  Triggerer --> DB
+```
+*Five cooperating components, one source of truth: the metadata database.*
 
 ---
 

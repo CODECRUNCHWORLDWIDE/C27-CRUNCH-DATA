@@ -28,6 +28,17 @@ Every record carries (at least) two timestamps, and conflating them is the root 
 
 Kleppmann's *DDIA* chapter 11 develops this distinction precisely and names the consequence: a window keyed on event time can never be *certain* it has seen all its events, because a straggler can always arrive later <https://dataintensive.net/>. Batch inherits the same truth; streaming (Week 9) just makes it continuous.
 
+```mermaid
+sequenceDiagram
+  participant Device
+  participant Pipeline
+  Device->>Device: Order placed June 16
+  Note over Device: Offline three days
+  Device->>Pipeline: Upload June 19
+  Note over Pipeline: Ingestion time June 19
+```
+*Event time and ingestion time diverge whenever a device stays offline before uploading.*
+
 ## 3. Why an event-time watermark silently drops a late record
 
 Recall Lecture 2's incremental extract: `WHERE updated_at > last_watermark`. Suppose `updated_at` is set to the *event* time (a common, innocent-looking mistake). Walk it through:
@@ -126,6 +137,18 @@ ON CONFLICT (customer_id) WHERE is_current DO NOTHING;
 A lighter-weight variant points unresolved facts at a single shared "Unknown" dimension row (surrogate key `-1`, the standard Kimball sentinel) and reprocesses them on a later run once the real dimension lands. The placeholder/inferred-member pattern is preferred because it preserves the natural key, so the correction is automatic.
 
 The rule, either way: **never let a late dimension turn a fact into a silently dropped row.** An inner join that drops unmatched facts is the same class of bug as an event-time watermark that drops late facts — a silent loss with no error.
+
+```mermaid
+flowchart TD
+  F["Fact references customer 99812"] --> D{"Dimension row exists"}
+  D -->|No| P["Insert inferred placeholder row"]
+  P --> J["Fact join resolves to placeholder key"]
+  D -->|Yes| J
+  J --> R["Later dimension load arrives"]
+  R --> U["Update placeholder attributes in place"]
+  U --> C["Fact rows inherit corrected attributes automatically"]
+```
+*A placeholder dimension row lets the fact resolve immediately and self-correct once real data arrives.*
 
 ## 6. Reprocessing windows, foreshadowing Week 9
 

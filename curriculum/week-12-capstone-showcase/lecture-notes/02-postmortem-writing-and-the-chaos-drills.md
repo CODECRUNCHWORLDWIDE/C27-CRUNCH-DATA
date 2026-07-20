@@ -35,9 +35,28 @@ Use the Google SRE structure (<https://sre.google/sre-book/postmortem-culture/>)
 5. **Resolution** — exactly what you did to recover, step by step, so it is reproducible — and, for a data pipeline, *how you proved no bad data leaked downstream and nothing was double-counted.*
 6. **Lessons / action items** — blameless, each with an owner and a "done when." Separate the "prevent recurrence" items from the "detect faster next time" items.
 
+```mermaid
+flowchart TD
+  A["Summary"] --> B["Timeline"]
+  B --> C["Root cause"]
+  C --> D["Detection"]
+  D --> E["Resolution"]
+  E --> F["Lessons and action items"]
+```
+*The Google SRE postmortem structure, written in this order.*
+
 ## 4. The single-root-cause trap
 
 Most incidents do not have one root cause; they have a chain, and a postmortem that stops at the first cause it finds misses the real lesson. Consider the malformed-batch drill: the dashboard went flat. The first cause: a column was renamed in the source file. But why did that flatten the dashboard rather than fail loudly? Because the extract loaded 0 rows instead of erroring on the missing column. And why did 0 rows produce yesterday's number rather than a visible gap? Because the mart was incremental and an empty increment is a no-op, so the dashboard silently served the prior day. And why was none of this caught for seven hours? Because there was no quality gate at ingestion and no freshness check at the mart. Four causes, four different fixes (validate the schema at extract; fail on an unexpectedly empty load; gate the ingestion boundary with Great Expectations; add a mart-freshness check). A postmortem that stops at "the column was renamed" learns one lesson; one that follows the chain learns four, and the four together are what actually prevent recurrence.
+
+```mermaid
+flowchart TD
+  A["Column renamed in source file"] --> B["Extract loads 0 rows instead of erroring"]
+  B --> C["Incremental mart treats empty load as a no-op"]
+  C --> D["Dashboard silently serves yesterday's number"]
+  D --> E["No gate or freshness check catches it for 7 hours"]
+```
+*Following the chain of why past the first cause reveals four fixes, not one.*
 
 The technique: for each cause, ask "why did *that* happen" until you reach a cause genuinely outside your system (e.g., "the upstream team renamed the column without notice" — a real boundary that the data-contract action item addresses) or until the chain forks into the independent system weaknesses that each deserve a fix.
 

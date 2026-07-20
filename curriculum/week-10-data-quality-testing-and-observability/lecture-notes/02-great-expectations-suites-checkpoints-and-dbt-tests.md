@@ -43,6 +43,18 @@ Validation Definition       # binds ONE Suite to ONE Batch Definition ("run thes
 
 The two halves — **(suite of expectations)** and **(data to run them on)** — stay separate until the **Validation Definition** marries them, and the **Checkpoint** is the runnable unit that produces a result you can act on (the `result.success` your Airflow task raises on). Hold that shape; the code below just fills it in.
 
+```mermaid
+flowchart TD
+  A["Data Context"] --> B["Data Source"]
+  B --> C["Data Asset"]
+  C --> D["Batch Definition"]
+  E["Expectation Suite"] --> F["Validation Definition"]
+  D --> F
+  F --> G["Checkpoint"]
+  G --> H["Action"]
+```
+*The data side and the rules side stay separate until the Validation Definition binds them; the Checkpoint runs it and fires Actions.*
+
 ---
 
 ## 3. Building a suite over the raw orders ingestion (GX 1.x)
@@ -312,6 +324,17 @@ dbt encodes Lecture 1 §5.2's fail-vs-warn directly:
 - `severity: warn` — failing rows are reported but the build continues. This is the dbt equivalent of "monitor, don't gate."
 - `error_if` / `warn_if` — thresholds on the *number of failing rows*, so you can say "warn on any, but only halt if it's bad enough." This is the graduated band from Lecture 1 §5.3.
 - `store_failures: true` — persist the failing rows to a table (`dbt_test__audit` schema) so you can inspect *which* rows failed, not just the count. This is your forensics artifact at the dbt layer.
+
+```mermaid
+flowchart TD
+  A["dbt test runs"] --> B["Count failing rows"]
+  B --> C{"Count above error_if?"}
+  C -->|Yes| D["severity error - build halts"]
+  C -->|No| E{"Count above warn_if?"}
+  E -->|Yes| F["severity warn - build continues"]
+  E -->|No| G["Test passes"]
+```
+*Graduated thresholds turn one test into three outcomes: pass, warn, or halt.*
 
 ```yaml
       - name: order_id

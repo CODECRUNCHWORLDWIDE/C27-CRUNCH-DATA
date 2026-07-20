@@ -33,6 +33,16 @@ The query returns one row per sale — the detail survives — and next to each 
 
 A useful way to hold the distinction: `GROUP BY` runs *before* the rows are emitted and reduces them; a window function runs *after* the rows are chosen (after `WHERE`, after `GROUP BY`, after `HAVING`) and decorates them. That ordering — window functions are computed late — is the reason you cannot filter on a window result in the same `WHERE` clause, which we return to in section 9.
 
+```mermaid
+flowchart TD
+  A["FROM and JOIN build the rows"] --> B["WHERE filters rows"]
+  B --> C["GROUP BY collapses rows"]
+  C --> D["HAVING filters groups"]
+  D --> E["Window functions compute here"]
+  E --> F["SELECT list and ORDER BY"]
+```
+*Window functions run after WHERE, GROUP BY, and HAVING, which is why a window result cannot be filtered in the same WHERE clause.*
+
 ## 2. The retail schema, restated
 
 Every query in this lecture runs against the Week-1 star schema. The shape you need to remember:
@@ -247,6 +257,15 @@ WHERE  ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) = 1;
 ```
 
 The reason is the evaluation order from section 1: `WHERE` is applied *before* window functions exist. So you have two real options.
+
+```mermaid
+flowchart TD
+  A["Need to filter on a window result"] --> B{"Which engine"}
+  B -->|"DuckDB, Snowflake, or BigQuery"| C["Use QUALIFY directly"]
+  B -->|"PostgreSQL"| D["Wrap the window in a CTE or subquery"]
+  D --> E["Filter on its alias in the outer WHERE"]
+```
+*QUALIFY filters a window result directly on engines that support it; PostgreSQL needs the CTE-and-WHERE workaround instead.*
 
 **DuckDB / Snowflake / BigQuery — `QUALIFY`.** `QUALIFY` is to window functions what `HAVING` is to `GROUP BY`: a clause that filters on the window result. It is clean and it is the right tool *on engines that have it*:
 

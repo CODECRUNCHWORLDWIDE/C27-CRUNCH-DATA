@@ -99,6 +99,15 @@ A **checkpoint** is a directory (we put it on MinIO: `s3a://lakehouse/checkpoint
 - **`state/`** — periodic snapshots and deltas of the state store (the running aggregates), so a restart resumes with the partial counts intact rather than recomputing from offset zero.
 - **`metadata`** — the query id and configuration.
 
+```mermaid
+flowchart TD
+  A["Checkpoint directory"] --> B["offsets - offset write ahead log"]
+  A --> C["commits - one file per committed batch"]
+  A --> D["state - state store snapshots and deltas"]
+  A --> E["metadata - query id and configuration"]
+```
+*What lives inside a Structured Streaming checkpoint directory.*
+
 Two iron rules about checkpoints, both load-bearing:
 
 1. **The checkpoint is bound to one query and one query plan.** Change the aggregation, the output mode, or the schema in an incompatible way and the old checkpoint can no longer be resumed — you must start a new checkpoint. This is by design: the state layout is plan-specific.
@@ -122,6 +131,17 @@ This is the heart of the week. "Exactly-once" does not mean each record is *phys
 > - replayable ✗ → at-most-once (a crash loses the un-replayable records).
 > - idempotent sink ✗ → at-least-once (a crash re-writes, duplicating).
 > - all three ✓ → **exactly-once**.
+
+```mermaid
+flowchart TD
+  A["Replayable source"] --> X{"All three factors present"}
+  B["Checkpoint"] --> X
+  C["Idempotent sink"] --> X
+  X -- Yes --> E["Exactly once"]
+  X -- Missing replayable source --> F["At most once"]
+  X -- Missing idempotent sink --> G["At least once"]
+```
+*Exactly-once is a product of three factors; drop one and the guarantee downgrades.*
 
 > **Week-3 tie-back, exact.** In Week 3 a failed run was safe to retry *because* the load was idempotent: re-reading from the stored watermark (replayable source) and `MERGE`-ing on the natural key (idempotent sink) meant a retry double-counted nothing. Streaming exactly-once is the same property, with the engine's checkpoint playing the role of your control table. If you understood Week-3 retries, you understand streaming exactly-once.
 

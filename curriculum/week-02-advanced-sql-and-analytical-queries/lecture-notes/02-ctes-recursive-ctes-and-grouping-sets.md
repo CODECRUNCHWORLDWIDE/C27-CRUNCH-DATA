@@ -87,6 +87,15 @@ ORDER  BY path;
 
 The result is the whole tree flattened, with a `depth` and a human-readable `path` like `Electronics > Phones > Smartphones`. The recursion terminates because the tree is finite: eventually a level has no children, the recursive term returns no rows, and PostgreSQL stops.
 
+```mermaid
+flowchart TD
+  A["Anchor query runs once - the roots"] --> B["Recursive term joins against the CTE so far"]
+  B --> C{"Did this pass produce new rows"}
+  C -->|"Yes"| B
+  C -->|"No"| D["Stop - UNION ALL of every pass is the result"]
+```
+*A recursive CTE evaluates the anchor once, then reruns the recursive term against the growing result until a pass adds no new rows.*
+
 If the data might contain a *cycle* (A is a child of B which is a child of A — a data bug, but they happen), the recursion never terminates. PostgreSQL 14+ supports the standard `CYCLE` clause to detect and stop on cycles:
 
 ```sql
@@ -137,6 +146,17 @@ GROUP  BY GROUPING SETS (
 ```
 
 `ROLLUP(region, category)` is shorthand for the *hierarchical* subtotals `(region, category), (region), ()` — exactly the three sets above. `CUBE(region, category)` is shorthand for *every* combination: `(region, category), (region), (category), ()`. Use `ROLLUP` for a hierarchy (region then category within it); use `CUBE` when you want every cross-tabulated subtotal. The family is documented at <https://www.postgresql.org/docs/16/queries-table-expressions.html#QUERIES-GROUPING-SETS>.
+
+```mermaid
+flowchart TD
+  G["Grand total - the empty set"]
+  G --> R1["Region subtotal - North"]
+  G --> R2["Region subtotal - South"]
+  R1 --> D1["Detail - North and Electronics"]
+  R1 --> D2["Detail - North and Apparel"]
+  R2 --> D3["Detail - South and Electronics"]
+```
+*ROLLUP walks the hierarchy top to bottom, emitting the grand total, each region subtotal, and every detail row in one pass.*
 
 ```sql
 -- identical result to the GROUPING SETS above

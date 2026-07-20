@@ -83,6 +83,15 @@ Step by step:
 2. **The exchange.** This is the `Exchange` node in the plan. Map output is now sitting as files on every executor's local disk, organized by target partition.
 3. **Reduce side.** Each task in the downstream stage is responsible for one shuffle partition. It must **fetch its slice from every map task's output** — an all-to-all network transfer. It merges the fetched pieces and does the final aggregation or join.
 
+```mermaid
+flowchart LR
+  A["Map task writes rows to buckets by key hash"] --> B["Spill sorted buckets to local disk"]
+  B --> C["Exchange: all to all network transfer"]
+  C --> D["Reduce task fetches its slice from every map task"]
+  D --> E["Merge and final aggregate or join"]
+```
+*The three shuffle steps: map-side bucketing, the network exchange, and reduce-side merge.*
+
 Why this hurts: it touches **disk** (spill + read), the **network** (all-to-all transfer), the **CPU** (serialize/deserialize/sort), and it is a **barrier** — the reduce stage cannot start until every map task has finished writing. A single slow map task delays the whole shuffle. And if one reduce partition gets far more rows than the others, that is **skew** (Lecture 3).
 
 The lesson that names the lecture: **avoid shuffles you don't need, shrink the ones you do.** Filter early so fewer rows shuffle. Project away columns you don't need so each shuffled row is smaller. Pre-aggregate where possible (Spark already does map-side partial aggregation for `groupBy`). And, above all, **avoid shuffling a join when you can broadcast it instead.**
@@ -212,6 +221,15 @@ A middle option: shuffle both sides by key (like sort-merge) but **build a hash 
 | Both large, one fits in memory after shuffle, no sort wanted | Shuffle hash join | Yes, both sides | `ShuffledHashJoin` |
 
 The instinct to build: **fact joined to dimension → broadcast the dimension.** Fact joined to fact → sort-merge, and watch for skew (Lecture 3). When in doubt, `explain` and look at which node you got.
+
+```mermaid
+flowchart TD
+  A["Join two DataFrames"] --> B["Check size of each side"]
+  B --> C["One side under 10 MB: broadcast hash join, no shuffle"]
+  B --> D["Both sides large, sort preferred: sort merge join, shuffle both"]
+  B --> E["Both sides large, hash preferred: shuffle hash join, shuffle both"]
+```
+*How Spark picks a join strategy based on the size of each side.*
 
 ---
 

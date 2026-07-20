@@ -72,6 +72,21 @@ If the leader broker dies, Kafka elects a new leader *from the ISR* — that is 
 
 On a single-node laptop cluster you will run `replication.factor=1` — there is only one broker, so there is nothing to replicate to — and that is fine for learning, but understand that it means *zero* durability against broker loss. Production runs `replication.factor=3`. The reference is <https://kafka.apache.org/documentation/#replication>.
 
+```mermaid
+flowchart TD
+  Leader["Leader replica - all reads and writes"]
+  F1["Follower replica - in sync"]
+  F2["Follower replica - fell behind"]
+  Leader -->|replicates to| F1
+  Leader -->|replicates to| F2
+  subgraph ISR["In sync replica set"]
+    Leader
+    F1
+  end
+  F2 -->|dropped from ISR - cannot become leader| Leader
+```
+*Only replicas in the ISR are eligible for election as the new leader if the current leader dies.*
+
 ## 5. Keys and partitioning — the heart of ordering
 
 Here is the rule that titles the whole week: **ordering is guaranteed only within a partition, never across partitions.** Within partition 0, records are read in append order, period. Between partition 0 and partition 1, there is *no* defined order — a record at offset 5 in partition 0 and a record at offset 3 in partition 1 have no temporal relationship Kafka will promise.
@@ -120,6 +135,15 @@ After compaction (latest per key retained):
 A record with a key and a *null* value is a **tombstone** — it marks the key as deleted, and after a delay the tombstone itself is removed. Compaction is the right model for a **changelog / table**: "the current state of each entity." A topic that holds the latest profile for each `user_id`, or the latest balance for each `account_id`, wants compaction — a new consumer can read the compacted topic and reconstruct the current state of every key without replaying the entire history of changes. This is the foundation of Kafka-as-a-database patterns and of stream-table duality you will meet in Week 9.
 
 The decision rule: **event stream → retention; current-state-per-key → compaction.** The reference is <https://kafka.apache.org/documentation/#compaction>.
+
+```mermaid
+flowchart TD
+  A["Topic holds independent events"] --> B["cleanup.policy = delete"]
+  B --> C["Keep a rolling time or size window"]
+  D["Topic holds current state per key"] --> E["cleanup.policy = compact"]
+  E --> F["Keep only the latest record per key"]
+```
+*Retention keeps a time or size window for event streams; compaction keeps only the latest value per key for changelogs.*
 
 ## 7. A producer in Python with `confluent-kafka`
 

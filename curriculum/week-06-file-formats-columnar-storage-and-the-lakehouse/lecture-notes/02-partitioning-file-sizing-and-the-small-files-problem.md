@@ -52,6 +52,15 @@ directories are never touched — not opened, not listed beyond the prune, not
 parsed. This is **partition pruning**, and it is coarser and cheaper than row-group
 pruning: you skip files before reading any footer at all.
 
+```mermaid
+flowchart TD
+  A["Query filters year 2024 and month 3"] --> B["Parse Hive directory names"]
+  B --> C{"Does directory match the filter"}
+  C -->|"No"| D["Skip directory, never opened"]
+  C -->|"Yes"| E["List and open files under that directory"]
+```
+*Partition pruning skips whole directories before any file is opened.*
+
 ```python
 # Writing Hive-style partitions with PyArrow.
 import pyarrow.dataset as ds
@@ -181,6 +190,15 @@ for i in range(1000):
 The fix is **compaction** (also called "bin-packing" or "OPTIMIZE"): read the many
 small files and rewrite them as a few right-sized files, ideally sorted by your
 dominant filter column so the new files also prune well.
+
+```mermaid
+flowchart LR
+  A["Many small files"] --> B["Read all rows into one table"]
+  B --> C["Sort by dominant filter column"]
+  C --> D["Write few right sized files"]
+  D --> E["Delete old small files"]
+```
+*Compaction rewrites many tiny files into a few right-sized, sorted files.*
 
 The plain-Parquet version is just a read-and-rewrite:
 

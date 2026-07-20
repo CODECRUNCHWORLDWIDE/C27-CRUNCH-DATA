@@ -54,6 +54,22 @@ bytes 5..:   payload         the Avro-encoded record body
 
 So every value on the topic is `[0x00][schema-id][avro-bytes]`. A consumer reads the first 5 bytes, extracts the schema ID, fetches that exact schema from the registry (caching it after the first fetch), and deserializes the payload against it — even as producers move to newer schema versions, each record self-describes which schema it was written with. This is why the registry and the wire format are inseparable: the ID in the bytes is the pointer into the registry. The reference is the wire-format section of the Avro fundamentals at <https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html#wire-format>.
 
+```mermaid
+sequenceDiagram
+  participant Producer
+  participant Registry as Schema Registry
+  participant Topic as Kafka topic
+  participant Consumer
+  Producer->>Registry: register or look up schema
+  Registry-->>Producer: schema ID
+  Producer->>Topic: write magic byte plus schema ID plus avro bytes
+  Consumer->>Topic: read record
+  Consumer->>Registry: fetch schema by ID
+  Registry-->>Consumer: schema
+  Consumer->>Consumer: decode payload
+```
+*The schema ID embedded in every record is the pointer back into the registry.*
+
 ## 5. Compatibility modes — the rules that keep the stream from rotting
 
 When you register a new schema version, the registry checks it against the existing version(s) under the subject according to the subject's **compatibility mode**. The four core modes (plus their `*_TRANSITIVE` variants) answer two questions: *which schema is being checked against which*, and *who must upgrade first*.
@@ -62,6 +78,15 @@ When you register a new schema version, the registry checks it against the exist
 - **`FORWARD`.** An *old* schema can read data written with the *new* schema. You may **add a field** (old readers ignore it) and **remove a field that had a default**. You upgrade **producers first**, then consumers.
 - **`FULL`.** Both backward *and* forward — the change must be readable both ways. Only the safest changes pass (adding/removing fields that have defaults). Upgrade order does not matter.
 - **`NONE`.** No checking. Any change registers. Use only when you genuinely have no compatibility requirement; it removes the protection that is the whole point of the registry.
+
+```mermaid
+flowchart TD
+  A["New schema registered"] --> B["BACKWARD - new schema reads old data - upgrade consumers first"]
+  A --> C["FORWARD - old schema reads new data - upgrade producers first"]
+  A --> D["FULL - both directions must work"]
+  A --> E["NONE - no compatibility check"]
+```
+*Compatibility mode decides which upgrade order is safe when a schema changes.*
 
 The `*_TRANSITIVE` variants (`BACKWARD_TRANSITIVE`, etc.) check against **all** previous versions, not just the immediately preceding one — stronger, guards against a chain of individually-compatible-but-collectively-incompatible changes.
 

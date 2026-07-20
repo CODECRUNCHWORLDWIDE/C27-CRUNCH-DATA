@@ -86,6 +86,21 @@ Two different groups (`group.id=analytics` and `group.id=archival`) are *indepen
 
 Note: `subscribe()` opts into group management and automatic assignment. There is also `assign()`, which manually pins specific partitions to a consumer and bypasses the group — useful for special cases, but `subscribe` is the normal path and the one that rebalances.
 
+```mermaid
+flowchart LR
+  T["Topic clicks - 3 partitions"]
+  P0["Partition 0"]
+  P1["Partition 1"]
+  P2["Partition 2"]
+  T --> P0
+  T --> P1
+  T --> P2
+  P0 --> C1["Consumer 1"]
+  P1 --> C2["Consumer 2"]
+  P2 --> C3["Consumer 3"]
+```
+*With three consumers in one group, each partition is owned by exactly one consumer - maximum parallelism for this topic.*
+
 ## 5. Rebalancing — when the assignment changes
 
 A **rebalance** is Kafka recomputing the partition-to-consumer assignment within a group. It is triggered by:
@@ -170,6 +185,20 @@ The reference is <https://kafka.apache.org/documentation/#semantics>.
 True exactly-once *within Kafka* is real, since Kafka 0.11, via **transactions** layered on the idempotent producer. The canonical use case is the **read-process-write** loop: consume from an input topic, transform, produce to an output topic, and make the *consume-offset-commit* and the *produce* atomic — either both happen or neither does.
 
 The mechanism: a transactional producer is given a stable `transactional.id`. It can `begin_transaction()`, produce output records, *atomically include* the input consumer's offsets in the same transaction with `send_offsets_to_transaction()`, and `commit_transaction()`. If anything fails, `abort_transaction()` rolls back both the produced records and the offset commit. Consumers downstream set `isolation.level=read_committed` so they only see records from *committed* transactions, never aborted ones.
+
+```mermaid
+sequenceDiagram
+  participant App as Application
+  participant In as Input topic
+  participant Out as Output topic
+  App->>In: poll record
+  App->>App: begin_transaction
+  App->>Out: produce transformed record
+  App->>In: send_offsets_to_transaction
+  App->>App: commit_transaction
+  Note over Out: read_committed consumers only see this after commit
+```
+*Read-process-write ties the consumed offset and the produced record into one atomic transaction.*
 
 ```python
 from confluent_kafka import Producer, Consumer, TopicPartition, KafkaError

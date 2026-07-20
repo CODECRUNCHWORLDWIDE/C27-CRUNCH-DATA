@@ -97,6 +97,21 @@ A contract nobody checks is a wiki page. Enforcement runs on **both** sides:
 - **Producer side (the important one):** the producer's CI runs a contract test against the data they're *about* to ship. If they dropped `currency_code` or changed the grain, *their* build fails before the change reaches you. Tools: the `datacontract` CLI (`datacontract test contracts/orders.yaml`), or generated dbt/GX checks from the contract.
 - **Consumer side (defense in depth):** you run the same schema + SLA checks at *your* ingestion boundary (the GX suite from Lecture 2) so that if a breaking change slips through, *your* gate halts before it corrupts your marts.
 
+```mermaid
+sequenceDiagram
+  participant Producer
+  participant ProducerCI as Producer CI
+  participant Consumer
+  participant ConsumerGate as Consumer GX gate
+  Producer->>ProducerCI: Ship data change
+  ProducerCI->>ProducerCI: Run contract test
+  ProducerCI-->>Producer: Fail build if contract broken
+  Producer->>Consumer: Send data once CI passes
+  Consumer->>ConsumerGate: Run ingestion checks
+  ConsumerGate-->>Consumer: Halt if a breaking change slipped through
+```
+*The contract is enforced twice - once by the producer before shipping, once by the consumer before trusting.*
+
 The contract is the single source of truth that *generates* both sides' checks. A field marked `required: true` becomes a `not_null` gate; an `enum` becomes `accepted_values` / `ExpectColumnValuesToBeInSet`; `minimum: 0` becomes a range check; the volume SLA becomes `ExpectTableRowCountToBeBetween`. The contract is the taxonomy of Lecture 1, written down and signed.
 
 ---
@@ -294,6 +309,15 @@ The full loop the mini-project builds:
 ```
 
 The contract defines what to check; the gates enforce it and halt on failure; the metadata records every run; the anomaly detectors read the metadata to catch the drift the static gates miss; the report makes all of it legible. Remove any one and the system regresses to "a pipeline that runs and hopes."
+
+```mermaid
+flowchart TD
+  A["Data contract"] --> B["GX suite, dbt tests, freshness and volume checks"]
+  B --> C["meta.load_metrics"]
+  C --> D["Anomaly detection - rolling baselines"]
+  D --> E["Data quality report"]
+```
+*The contract defines the checks, the checks feed the metrics table, and the metrics power anomaly detection and the report.*
 
 ---
 

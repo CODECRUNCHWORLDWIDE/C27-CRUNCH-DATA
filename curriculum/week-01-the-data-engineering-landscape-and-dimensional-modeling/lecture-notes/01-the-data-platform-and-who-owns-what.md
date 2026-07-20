@@ -118,6 +118,15 @@ CREATE TABLE order_line (
 
 To answer "weekly revenue by category last quarter" against *this* schema you must join `order_line → product → category → order`, four tables, every time, and the more analysts who write that join the more ways it goes subtly wrong. The normalization that makes writes safe makes analytical reads *expensive and error-prone*. That is not a flaw in the OLTP design — it is the OLTP design working as intended. Analytics is simply not its job.
 
+```mermaid
+erDiagram
+  CUSTOMER ||--o{ ORDER : places
+  CATEGORY ||--o{ PRODUCT : classifies
+  ORDER ||--o{ ORDER_LINE : contains
+  PRODUCT ||--o{ ORDER_LINE : appears_in
+```
+*The OLTP schema is fully normalized — every fact lives in exactly one table, reached by following foreign keys.*
+
 **The OLAP shape — denormalized star, read-optimized.** This is what you, the data engineer, build *from* the OLTP data. The descriptive context is flattened into wide dimension tables; the measurements live in one central fact table; the analytical question becomes a single fact-to-dimension join.
 
 ```sql
@@ -203,6 +212,13 @@ You will be asked to place yourself on this timeline in every interview, so lear
 **Act II — the data lake (schema-on-read).** The Hadoop era answered with the lake: dump *everything* — logs, JSON, images, CSVs — as raw files into cheap distributed/object storage (HDFS, then S3), and defer structure to query time (schema-on-read). Storage got cheap and flexible. But lakes had no transactions, no schema enforcement, and no reliable notion of "the current version of this table". Half-written files, no atomic appends, and no way to know which files were stale turned many lakes into *data swamps*. Kleppmann's treatment of derived data and the cost of weak guarantees is the conceptual backdrop (<https://dataintensive.net/>).
 
 **Act III — the lakehouse (open formats + ACID table semantics).** The present synthesis keeps the lake's cheap object storage and open columnar files (Parquet) but layers a *table format* — Apache Iceberg or Delta Lake — on top that adds ACID transactions, schema enforcement and evolution, time travel, and a reliable current-snapshot pointer. You get the lake's flexibility *and* the warehouse's trustworthiness. C27 builds exactly this in Phase II (Weeks 5–8); this week you are building the Act-I warehouse so that the Act-III lakehouse has something coherent to be a generalization *of*. Dimensional modeling did not die with the warehouse — Iceberg and Delta tables are routinely modeled as Kimball stars. The grain, the dimensions, the SCDs you learn this week travel with you the whole course.
+
+```mermaid
+flowchart LR
+  A["Warehouse 1990s - schema on write"] -->|"too rigid and expensive"| B["Data Lake 2010s - schema on read"]
+  B -->|"rotted into a data swamp"| C["Lakehouse 2020s - open formats plus ACID"]
+```
+*Each era of data platforms was born from the previous era's failure mode.*
 
 ## 7. Where Postgres sits, and why it is the right teaching engine
 

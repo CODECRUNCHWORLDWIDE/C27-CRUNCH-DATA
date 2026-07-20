@@ -28,6 +28,14 @@ This is the law specific to a *data* capstone and the most important one. The in
 
 Follow this structure in the live defense (the ~10-minute live portion). It mirrors the SYLLABUS architecture diagram and gives the reviewer a map before the details.
 
+```mermaid
+flowchart TD
+  A["Architecture overview - 60 sec"] --> B["Live happy path - batch and stream"]
+  B --> C["Deliberate failure and recovery"]
+  C --> D["Artifacts for the unshowable"]
+```
+*The four-part live defense structure, from map to proof.*
+
 ### Part 1 — Architecture overview (60 seconds)
 
 Put the architecture diagram on screen and narrate the data flow once, end to end: "A daily file and a Kafka clickstream both feed an Iceberg lakehouse on MinIO. Airflow orchestrates the batch path — idempotent, watermarked, backfillable. dbt transforms raw → staged → mart with tests and snapshots. A Spark Structured Streaming job consumes the Kafka topic with an event-time watermark and an exactly-once sink. Great Expectations and dbt tests gate every boundary. The mart feeds a dashboard." Sixty seconds, no detail — the map, so the reviewer knows where each later piece sits.
@@ -42,6 +50,18 @@ Two flows, pre-staged to the interesting transition:
 ### Part 3 — One deliberate failure + recovery (~3 minutes)
 
 This is Law 3 made concrete. Drop a deliberately malformed file (a column renamed, a value out of range) into the landing zone and trigger the load. Show the Great Expectations checkpoint failing, the Airflow task going red, the alert firing, and — critically — the mart's number *not changing*, because the gate halted the load before it reached the mart. Then show the recovery: quarantine the bad file, fix or replace it, re-run, the gate passes, the mart updates. A reviewer who sees a bad load *caught and recovered* has seen the whole quality discipline of the course in three minutes.
+
+```mermaid
+flowchart LR
+  A["Malformed file lands"] --> B["Great Expectations checkpoint fails"]
+  B --> C["Airflow task goes red"]
+  C --> D["Alert fires"]
+  D --> E["Mart stays clean"]
+  E --> F["Quarantine and fix file"]
+  F --> G["Re-run - gate passes"]
+  G --> H["Mart updates"]
+```
+*Law 3 in action: a quality gate catching bad data, then the scripted recovery.*
 
 ### Part 4 — The artifact for the unshowable (~2 minutes)
 

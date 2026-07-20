@@ -84,6 +84,20 @@ source(raw,orders) ──────> stg_orders ────┤               
 source(raw,order_items) ─> stg_order_items┘──> int_orders_enriched ─────────────────┘
 ```
 
+```mermaid
+flowchart LR
+  RC["source raw customers"] --> SC["stg_customers"]
+  RO["source raw orders"] --> SO["stg_orders"]
+  ROI["source raw order_items"] --> SOI["stg_order_items"]
+  SC --> SNAP["customers_snapshot"]
+  SNAP --> DC["dim_customer"]
+  SO --> IOE["int_orders_enriched"]
+  SOI --> IOE
+  IOE --> FO["fct_orders"]
+  DC --> FO
+```
+*The lineage graph dbt docs renders is exactly this ref and source DAG, clickable in both directions.*
+
 The skills you practice reading it:
 
 - **Trace upstream.** Click `fct_orders`; the graph highlights its ancestors. The answer to "where does this number come from" is now a click, not a code archaeology session. This is the lineage axis from Lecture 1's analytics-as-code argument, made literal.

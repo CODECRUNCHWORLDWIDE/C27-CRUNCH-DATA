@@ -38,6 +38,13 @@ Reviewer questions fall into six families. Anticipate one or two from each.
 
 Every defense reaches a question past your edge. The only wrong response is to bluff — a reviewer who runs data platforms can smell a bluff instantly, and a caught bluff costs you more than ten "I don't know"s, because it makes every *other* answer suspect. The correct senior answer has three parts: "I don't know — here is what I *do* know that's adjacent — and here is exactly how I would find out." Example: "I haven't measured the exact shuffle spill on that join, but I know it's a sort-merge join because the build side is above the broadcast threshold, and I'd confirm by reading the Spark UI's SQL tab for the exchange and the spill metrics, then decide whether to bump the broadcast threshold or salt the skewed key." That answer demonstrates more competence than a confident wrong number.
 
+```mermaid
+flowchart LR
+  A["I do not know"] --> B["Here is what I do know that is adjacent"]
+  B --> C["Here is exactly how I would find out"]
+```
+*The three-part shape of a strong answer past the edge of your knowledge.*
+
 ## 4. The eight rounds, mapped to your capstone
 
 A senior data-engineering loop runs roughly eight rounds. Each has an answer in your capstone — which is the whole point of having built it.
@@ -67,6 +74,14 @@ The capstone becomes a credential only if a hiring manager opens it. Four pieces
 2. **One merged PR into an open-source data project** (dbt, Airflow, Dagster, DuckDB, Iceberg, Delta, Great Expectations, or a Spark/Kafka client). This is Challenge 2 this week. A merged PR proves you can read an unfamiliar codebase, work to its conventions, pass its CI, and get a maintainer to accept your change — the single most predictive portfolio signal for "can this person contribute on day one."
 3. **A short technical blog post explaining one bug** from your chaos drill — a late record that wasn't counted, a skewed join that spilled, a schema-evolution surprise. Specific, with the artifact (the lag panel, the Spark UI, the rejected schema), with the fix. One good incident post outperforms ten "intro to dbt" posts.
 4. **A landing page that links all of the above** and does not contain the phrase "data-driven." It says, plainly, what you build and links to the proof. The SYLLABUS is explicit about the "data-driven" prohibition; it is a real signal — the phrase marks a portfolio written for a recruiter's keyword filter rather than for an engineer who will read the code.
+
+```mermaid
+flowchart TD
+  A["Public repo with README and architecture doc"] --> B["One merged open source PR"]
+  B --> C["One technical blog post about a bug"]
+  C --> D["Landing page linking everything"]
+```
+*Portfolio pieces in priority order - what a hiring manager opens first.*
 
 ## 7. The through-line: owning the platform
 

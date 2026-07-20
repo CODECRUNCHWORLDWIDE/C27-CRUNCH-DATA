@@ -81,6 +81,14 @@ A **late event** is one whose event time is earlier than the current maximum eve
 1. **Late but within the watermark.** The event's event time is later than the current watermark. Its window is still open. Structured Streaming *updates* the window's aggregate to include it. This is the happy case — late data is handled *correctly and automatically*, with no backfill, no special code. The injected late event in the lab is engineered to land here, and proving it folds into the right window is the lab's correctness test.
 2. **Too late — beyond the watermark.** The event's event time is earlier than the current watermark. Its window has already been closed and dropped. Spark *discards* the event. It does not error; it silently drops it, and increments a metric you can see in `lastProgress` (the state operator's `numRowsDroppedByWatermark`). If you care about these, lengthen the watermark or route them elsewhere.
 
+```mermaid
+flowchart TD
+  A["Event arrives with event time T"] --> B{"Is T earlier than the watermark"}
+  B -- No, window still open --> C["Aggregate updated in place"]
+  B -- Yes, window already closed --> D["Event dropped and counted as too late"]
+```
+*The watermark classifies every incoming event as still-open or too-late-and-dropped.*
+
 The key realization: **the watermark is what makes "late" a decidable predicate.** Without a watermark, the engine has no definition of "too late," so it would have to keep every window open forever (unbounded state) and could never emit a final result in append mode. The watermark is simultaneously (a) the completeness guarantee — "I've seen everything up to *W*," (b) the state-bounding mechanism — "drop everything older than *W*," and (c) the late-data classifier — "older than *W* is too late." One concept, three jobs.
 
 ---
@@ -160,6 +168,16 @@ Spark Structured Streaming is, by default, a **micro-batch** engine. It does *no
 4. Update the **state store** with new partial aggregates; advance the watermark.
 5. Write the output via the sink; **commit** the batch (record the offset range and state in the checkpoint).
 6. Repeat.
+
+```mermaid
+flowchart TD
+  A["Wake on trigger"] --> B["Ask source for new offsets"]
+  B --> C["Plan and run a batch job over that slice"]
+  C --> D["Update state store and advance watermark"]
+  D --> E["Write output and commit checkpoint"]
+  E --> A
+```
+*The Structured Streaming micro-batch loop: each iteration is an ordinary Spark batch job.*
 
 So a streaming query is literally *a sequence of small batch jobs*, each over a slice of the stream, with state carried forward between them in the state store and progress recorded in the checkpoint. This is why your Week-7 batch knowledge transfers directly: each micro-batch *is* a Week-7 batch job. It is also why Spark's streaming latency floor is roughly the micro-batch interval — you cannot react to an event faster than the next batch boundary. (Spark also has a "Continuous Processing" experimental mode for sub-batch latency, but it is limited and rarely used; the micro-batch model is what production runs.) Contrast this with Flink in Lecture 3, which processes each record as it arrives with no batch boundary.
 

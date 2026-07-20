@@ -96,6 +96,16 @@ data files could possibly match your filter, and hands the engine only those fil
 paths. This is metadata-level pruning stacked on top of the row-group pruning from
 Lecture 01.
 
+```mermaid
+flowchart TD
+  A["Catalog pointer"] --> B["metadata.json"]
+  B --> C["Snapshot"]
+  C --> D["Manifest list"]
+  D --> E["Manifest files"]
+  E --> F["Data files"]
+```
+*Iceberg resolves a table through five metadata layers before touching a data file.*
+
 The **catalog** is the part that needs care. Options you will meet: a **REST
 catalog**, a **Hive metastore**, a JDBC/SQL catalog, AWS Glue, or — simplest for a
 laptop — a **SQL catalog backed by SQLite** plus an `s3fs` filesystem for the data.
@@ -215,6 +225,19 @@ This is why a `SELECT` over a lakehouse table is safe even while a job is writin
 to it — the reader is pinned to a snapshot, the writer publishes a new one, and they
 never interfere. Contrast the plain-Parquet directory, where a reader can stumble
 into half-written files.
+
+```mermaid
+sequenceDiagram
+  participant R as Reader
+  participant M as MetadataPointer
+  participant W as Writer
+  R->>M: Resolve current snapshot
+  M-->>R: Snapshot 5 file list
+  W->>M: Publish snapshot 6
+  R->>R: Still reading snapshot 5
+  R->>M: New query resolves snapshot 6
+```
+*Snapshot isolation: a running reader keeps its pinned snapshot even as a writer commits a newer one.*
 
 ## 6. Time travel — read an old snapshot
 

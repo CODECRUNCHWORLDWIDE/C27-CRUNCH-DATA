@@ -34,6 +34,16 @@ TYPE 3  Add a column.      ONE prior value kept side by side.
 | **2** | Adds a new effective-dated row | **Many over time** | You must reconstruct "what was true at the time of the fact" — the default for meaningful attributes |
 | **3** | Adds a "previous value" column | One | You need exactly the *current* and *one prior* state, not full history (a re-org with an "old region" view) |
 
+```mermaid
+flowchart TD
+  A["Attribute changes"] --> B{"Must history be preserved"}
+  B -->|"No - never changes"| C["Type 0 - retain original"]
+  B -->|"No - only current matters"| D["Type 1 - overwrite"]
+  B -->|"Yes - full history needed"| E["Type 2 - new row"]
+  B -->|"Yes - one prior value only"| F["Type 3 - prior value column"]
+```
+*Which SCD type to use depends on how much history the attribute needs to keep.*
+
 ## 3. Type 1 — overwrite (the baseline you must understand to reject)
 
 Type 1 is what a naive `UPDATE` does: the new value replaces the old, and the old value ceases to exist. There is exactly one row per natural key, and it always reflects the current truth.
@@ -107,6 +117,14 @@ product_key | sku      | category_name    | valid_from | valid_to   | is_current
 The interval convention is **half-open**: a version covers `[valid_from, valid_to)`. The old row's `valid_to` equals the new row's `valid_from` (both `2026-06-19`), so there is exactly one row valid on any given date and no gaps and no overlaps. Get this boundary convention right and the audit query in Section 7 is trivial; get it wrong (inclusive `valid_to`) and the changeover date matches two rows.
 
 **The crucial payoff:** `fact_sales` stores the `product_key` *that was current on the date of the sale*. A sale on 2026-06-10 stored `product_key = 7` ("Snacks"); a sale on 2026-06-20 stored `product_key = 134` ("Healthy Snacks"). Join the fact to the dimension on the surrogate key and every sale automatically shows the category *as it was at the time of the sale* — point-in-time correctness, for free, forever. A Type-1 overwrite throws this away; Type 2 is how you keep it.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Snacks
+  Snacks --> HealthySnacks : recategorized 2026-06-19 old row closed new row opened
+  HealthySnacks --> [*]
+```
+*A Type 2 change closes the old dimension row and opens a new one — the natural key now spans two versions.*
 
 ## 6. The SCD-2 maintenance: close the old, open the new, in one MERGE
 

@@ -33,6 +33,14 @@ STEP 4  Identify the facts              -> The numeric measurements at that grai
 
 Run those four steps and the schema is no longer a matter of taste; it is mostly determined. The art is almost entirely in step 2.
 
+```mermaid
+flowchart TD
+  A["Select the business process"] --> B["Declare the grain"]
+  B --> C["Identify the dimensions"]
+  C --> D["Identify the facts"]
+```
+*Kimball's four-step process runs in strict order — grain first, then dimensions, then facts.*
+
 **Working the four steps backward from a business question.** The discipline is best learned by watching it run. A stakeholder says: *"I want weekly revenue by product category and by store region for last quarter, and I want to be able to break it down to the individual product and the individual customer."* Translate that sentence into the four steps:
 
 1. **Business process?** The sentence is about *selling*. The process is retail sales. (Not "the dashboard" — the dashboard is the *output*; the process is the verb being measured.)
@@ -198,6 +206,15 @@ The shape is the **star**:
 ```
 
 Every dimension is *one hop* from the fact. Any business question — by date, by category, by region, by loyalty tier, or any combination — is one join per dimension you touch and a `GROUP BY`. That single-hop property is the whole point of the star.
+
+```mermaid
+erDiagram
+  DIM_DATE ||--o{ FACT_SALES : dates
+  DIM_PRODUCT ||--o{ FACT_SALES : products
+  DIM_STORE ||--o{ FACT_SALES : locates
+  DIM_CUSTOMER ||--o{ FACT_SALES : buys
+```
+*Every dimension sits one hop from the fact table — the defining shape of a star schema.*
 
 ## 7. Star vs snowflake
 

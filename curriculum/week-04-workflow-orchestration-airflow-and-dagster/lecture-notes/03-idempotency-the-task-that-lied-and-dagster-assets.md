@@ -51,6 +51,15 @@ Three properties make this safe:
 2. **It replaces, it does not append.** The `DELETE` makes the second run scrub the first run's rows before re-inserting, so two runs equal one run. An `INSERT`-only load would double the window on the second run — the backfill double-count from Lecture 2 §4.2.
 3. **The delete and the insert commit in one transaction.** A crash between them does not leave the window half-empty; it rolls back to the pre-run state, which a retry then cleanly replaces.
 
+```mermaid
+flowchart TD
+  B["Begin transaction"] --> D["Delete existing rows for this window"]
+  D --> I["Insert freshly extracted rows"]
+  I --> C["Commit delete and insert together"]
+  C --> S["Window converges to one consistent state"]
+```
+*Run this once or five times for the same window — the end state is identical.*
+
 ### 1.2 Delete-then-insert vs merge/upsert
 
 Delete-then-insert replaces the *whole window*. The Week 3 alternative — `MERGE` / `INSERT ... ON CONFLICT DO UPDATE` keyed on a business key — replaces *individual rows*. Both are idempotent; choose by shape:
@@ -138,6 +147,14 @@ Wire it downstream so it gates everything after the load:
 loaded = load()
 assert_load(loaded) >> publish_mart()   # publish only runs if the assertion passed
 ```
+
+```mermaid
+flowchart LR
+  L["load task exits zero"] --> A["assert_load checks the warehouse"]
+  A -->|"Counts match, volume sane"| P["publish_mart runs"]
+  A -->|"Mismatch or zero rows"| F["AirflowFailException, no retry, alert human"]
+```
+*A green exit code is not proof of correct data — the assertion task is the real gate.*
 
 `AirflowFailException` fails the task *without* retrying (unlike a generic exception, which would retry — and re-asserting a still-bad load just burns retries). Now the truncated-source day turns the assertion task **red**, fires your `on_failure_callback`, halts `publish_mart`, and a human investigates *before* the executive sees a 59% revenue drop. The lie is converted into a loud, visible failure. This row-count/volume/checksum gate is the seed of the Week 10 data-quality layer; you are building the muscle now.
 

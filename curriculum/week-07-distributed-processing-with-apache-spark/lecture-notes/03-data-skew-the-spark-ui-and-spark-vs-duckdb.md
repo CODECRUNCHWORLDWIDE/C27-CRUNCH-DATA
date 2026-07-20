@@ -25,6 +25,15 @@ The NYC taxi data is genuinely skewed in several columns:
 
 When you shuffle on a skewed key, the partition that receives the hot key gets enormous. The task assigned to that partition reads more data, holds more in memory (risking spill or OOM), and runs far longer than its siblings. Because a stage cannot finish until its *last* task finishes, that one **straggler** sets the wall-clock time of the entire stage. The other tasks finished in seconds; the cluster is mostly idle; the job is "slow." Adding cores does nothing — the bottleneck is one task that cannot be parallelized further.
 
+```mermaid
+flowchart LR
+  A["Hot key holds most of the rows"] --> B["Shuffle sends hot key to one partition"]
+  B --> C["One task handles a huge partition"]
+  C --> D["Straggler task runs for minutes"]
+  D --> E["Stage waits on the straggler to finish"]
+```
+*How one skewed key turns into one straggler task that sets the whole stage's wall-clock time.*
+
 ---
 
 ## 2. The Spark UI, tab by tab
@@ -68,6 +77,16 @@ One row per executor. Shows **cores**, **memory used / available**, **shuffle re
 3. **Stages tab, shuffle-read distribution:** which task pulled the giant slice? That is the hot key's partition.
 4. **SQL tab:** confirm the plan — is this a `SortMergeJoin` that should have been a broadcast? Is there a shuffle you could remove?
 5. **Executors tab:** any executor pinned on GC or spilling? → memory pressure from the skewed partition.
+
+```mermaid
+flowchart TD
+  A["Jobs tab: find the slow action"] --> B["Stages tab: find the slow stage"]
+  B --> C["Check task duration max vs median"]
+  C --> D["Shuffle read distribution: find the hot partition"]
+  D --> E["SQL tab: confirm the plan"]
+  E --> F["Executors tab: check GC and spill"]
+```
+*The five-step diagnosis workflow, tab by tab through the Spark UI.*
 
 ---
 

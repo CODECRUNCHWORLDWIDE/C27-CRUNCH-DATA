@@ -89,6 +89,19 @@ The cost is **not the bytes** — it is the metadata and per-file overhead:
 - **Lost parallelism efficiency.** A task per file means 18,000 tiny tasks, each with scheduling overhead that dwarfs its 110 KB of work.
 - **Object-store request cost.** On S3, `GET` requests are billed per thousand. 18,000 GETs per query × thousands of queries is a line item.
 
+```mermaid
+flowchart TD
+  A["Streaming micro-batches every 30s"] --> B["Thousands of small files"]
+  B --> C["Per-file open and seek overhead"]
+  B --> D["Manifest and metadata bloat"]
+  B --> E["Lost parallelism efficiency"]
+  C --> F["Compaction rewrites into few right-sized files"]
+  D --> F
+  E --> F
+  F --> G["Bytes read unchanged but latency collapses"]
+```
+*How frequent micro-batches create the small-files problem, and how compaction cures it.*
+
 ### 3.3 The cure: compaction
 
 Compaction rewrites many small files into a few right-sized ones, leaving the logical table contents identical. Both table formats provide it as a maintenance operation.
@@ -289,6 +302,16 @@ AS SELECT * FROM local.db.events;
 Now the same daily query prunes to one day's partition. The Spark UI shows *size of files read ≈ 30 MB* (one day out of ~65 days), *partitions pruned = 64*. **Bytes scanned dropped from ~2 GB to ~30 MB — a ~65× reduction**, and that number is exactly what would have been billed on a metered engine.
 
 Compaction bought latency; partitioning bought bytes-scanned. Real optimization needs both: compaction so each partition is a few big files, partitioning so the query reads only the partitions it needs.
+
+```mermaid
+flowchart LR
+  A["Baseline: 18000 files unpartitioned"] --> B["Compact: rewrite_data_files"]
+  B --> C["About 4 files still 2 GB scanned"]
+  C --> D["Partition by days of event_ts"]
+  D --> E["Query prunes to one day"]
+  E --> F["About 30 MB scanned a 65x reduction"]
+```
+*Compaction fixes file size and latency; partitioning fixes relevance and bytes scanned.*
 
 ---
 

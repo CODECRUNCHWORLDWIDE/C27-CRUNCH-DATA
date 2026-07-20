@@ -86,6 +86,14 @@ GRANT SELECT ON customers_secure TO analyst, support;
 
 A `pii_reader` sees real emails; an `analyst` sees a deterministic hash they can still `GROUP BY`; nobody touches the base table. In the lakehouse, the equivalent is a masking view in the query engine (Trino/Spark) or a catalog-enforced column mask; the *pattern* — base locked, masked projection granted — is identical.
 
+```mermaid
+flowchart TD
+  A["Query hits customers_secure view"] --> B{"Does role have pii_reader"}
+  B -->|"Yes"| C["Return real email and name"]
+  B -->|"No"| D["Return hashed email and redacted name"]
+```
+*The base table stays locked; the view decides what each role sees.*
+
 ---
 
 ## 3. Access control — row- and column-level security
@@ -141,6 +149,19 @@ This is the hard problem and the one most engineers get wrong in interviews. **G
 2. **Time travel keeps the past on purpose.** Even after a logical delete, the *old snapshot* still references the *old file* that still contains the person's data. A `SELECT ... FOR VERSION AS OF` query — or anyone who reads the old files directly — resurrects them. A logical delete that leaves the old snapshot intact is **not** compliant erasure.
 
 So a compliant hard-delete is always **two steps**: (1) a logical row-level delete, then (2) physically purge the old data files and the snapshots that point at them.
+
+```mermaid
+flowchart TD
+  A["Erasure request received"] --> B["Step 1: logical delete"]
+  B --> C["Iceberg DELETE or Delta DELETE"]
+  C --> D["Step 2: physical purge"]
+  D --> E["expire_snapshots and remove_orphan_files"]
+  D --> F["VACUUM retain 0 hours"]
+  E --> G["Old files gone from storage"]
+  F --> G
+  G --> H["Verify with a time travel query"]
+```
+*Logical delete alone is not erasure; physical purge is the second, required step.*
 
 ### 4.1 Iceberg — row-level delete + snapshot expiration
 

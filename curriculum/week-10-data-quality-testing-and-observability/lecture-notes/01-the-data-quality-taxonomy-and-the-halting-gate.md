@@ -169,6 +169,17 @@ You do not check everything everywhere. The two-boundary pattern is the architec
 
 Why both and not one? Because the failure modes are different. The ingestion gate catches "this row is malformed"; the mart gate catches "this *result* is untrustworthy even though every row is fine." The truncated-load incident from §1 passes the ingestion gate cleanly (every one of the 16,000 rows is valid) and is caught *only* by the volume check at the mart boundary. You need both.
 
+```mermaid
+flowchart LR
+  A["Raw file"] --> B["GX suite - ingestion boundary"]
+  B --> C["Staging"]
+  C --> D["dbt models"]
+  D --> E["Mart"]
+  E --> F["Freshness and volume checks - mart boundary"]
+  F --> G["Dashboard"]
+```
+*Per-row checks gate the ingestion boundary; per-load checks gate the mart boundary before data reaches the dashboard.*
+
 ---
 
 ## 5. The halting gate: why a check must be able to stop the pipeline
@@ -198,6 +209,16 @@ def validate_orders_ingestion(**context):
 ```
 
 The shape that matters: the validation *result* must be inspected and the failure must be turned into a `raise`. The `GreatExpectationsOperator` (from the `airflow-provider-great-expectations` package) does this for you — it raises on a failed checkpoint by default (`fail_task_on_validation_failure=True`). A `PythonOperator` that runs GX but *forgets to check `result.success` and raise* is the classic broken gate: it runs the validation, prints a pretty report, returns `None`, the task goes green, and the bad load proceeds. **Running the check is not gating; acting on the result is gating.**
+
+```mermaid
+flowchart TD
+  A["Checkpoint runs"] --> B{"Result success?"}
+  B -->|Yes| C["Downstream runs"]
+  B -->|No| D{"Did the code raise?"}
+  D -->|No| E["Task stays green - bad load proceeds"]
+  D -->|Yes| F["Task fails - downstream blocked"]
+```
+*A check only becomes a gate when a failing result is turned into a raised exception.*
 
 ### 5.2 Fail vs warn: the two severities
 

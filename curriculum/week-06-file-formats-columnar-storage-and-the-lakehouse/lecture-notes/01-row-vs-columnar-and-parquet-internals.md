@@ -148,6 +148,19 @@ Four levels, from coarse to fine:
 The footer is the key to everything that follows. It is read first, it is small,
 and it tells the reader exactly which byte ranges to fetch and which to skip.
 
+```mermaid
+flowchart TD
+  A["Parquet file"] --> B["Row group 0"]
+  A --> C["Row group 1"]
+  A --> D["Footer with schema and stats"]
+  B --> E["Column chunk id"]
+  B --> F["Column chunk vendor"]
+  B --> G["Column chunk fare"]
+  G --> H["Page 0"]
+  G --> I["Page 1"]
+```
+*The four-level Parquet hierarchy: file, row group, column chunk, page.*
+
 ### Reading the structure with PyArrow
 
 ```python
@@ -268,6 +281,14 @@ pruning and the engine reads ~1–2% of the file. If the data is *not* sorted by
 the whole date range, no group can be pruned, and you read the entire file. **Same
 filter, same file size, 50× difference in bytes scanned, purely from sort order.**
 That is the lesson Challenge 01 makes you prove with measurements.
+
+```mermaid
+flowchart TD
+  A["Read footer stats for a row group"] --> B{"Does min max range overlap the filter"}
+  B -->|"No"| C["Skip the row group entirely"]
+  B -->|"Yes"| D["Read and decode the row group"]
+```
+*Per row group, statistics decide whether to skip or read.*
 
 This skipping is **predicate pushdown** (sometimes "filter pushdown" or "row-group
 pruning"): the filter is *pushed down* into the scan so the scan does less work,

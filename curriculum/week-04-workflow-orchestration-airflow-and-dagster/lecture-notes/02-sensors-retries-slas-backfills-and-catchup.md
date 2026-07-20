@@ -171,6 +171,16 @@ def on_retry(context):
 
 `on_failure_callback` fires only when the task has **exhausted its retries and finally failed** — that is the moment to page a human. `on_retry_callback` fires on each transient retry; use it for low-noise telemetry, not for paging (you do not want to wake someone for a self-healing blip). Putting the two together: retries + `on_retry_callback` handle the transient blip quietly; `on_failure_callback` pages when retries are exhausted; `sla`/`sla_miss_callback` alert when the run is late even though nothing has failed. Three signals, three mechanisms.
 
+```mermaid
+flowchart TD
+  T["Task instance runs"] --> O{"Outcome"}
+  O -->|"Transient failure, retries left"| OR["on_retry callback: quiet telemetry"]
+  OR --> T
+  O -->|"Retries exhausted"| OF["on_failure callback: page a human"]
+  O -->|"Still running past its SLA"| SM["sla_miss callback: alert, task keeps running"]
+```
+*Retries answer "run again". SLA answers "is it late". Three distinct signals, three distinct callbacks.*
+
 ---
 
 ## 4. Backfill and catchup: reprocessing history
@@ -194,6 +204,17 @@ This enumerates the daily intervals from 2026-05-20 through 2026-06-18 (the inte
 ### 4.2 The two ways a backfill melts the cluster
 
 **Melt #1 — no concurrency cap.** A naive backfill of 30 days with no `max_active_runs` launches up to 30 runs concurrently. Thirty simultaneous `load` tasks hammer the warehouse Postgres; CPU pins at 100%, connections exhaust, the metadata DB (also Postgres) slows because the scheduler is fighting for the same machine, healthchecks start failing, the scheduler gets restarted, tasks stick in `queued`, and the on-call engineer is paged at 02:00 to a pipeline that is "running" but accomplishing nothing. **Fix:** set `max_active_runs` (Lecture 1 §4.2). With `max_active_runs=16`, the backfill runs 16 at a time and queues the rest — bounded, predictable load. This is the "anatomy of a backfill that melts the cluster" from the week's lecture spine, and the fix is one parameter.
+
+```mermaid
+flowchart LR
+  Q["30 pending intervals"] --> CAP["max_active_runs equals 16"]
+  CAP --> RUN["16 running at once"]
+  CAP --> WAIT["14 queued"]
+  RUN --> FREE["Slot frees on completion"]
+  FREE --> WAIT
+  WAIT --> RUN
+```
+*The cap bounds concurrent load; queued intervals fill in as slots free up.*
 
 **Melt #2 — non-idempotent tasks.** A backfill of 30 days against a `load` that *appends* loads every window — and if any of those windows were *already loaded* (by the original scheduled run, or by an earlier backfill attempt), it loads them *again*. Now every double-loaded day has doubled rows, your revenue numbers are wrong, and you cannot tell which days are affected without an audit. **Fix:** idempotency — delete-then-insert per window (Lecture 3). A correctly idempotent backfill is *safe to run twice*; a non-idempotent one corrupts on the first re-run.
 

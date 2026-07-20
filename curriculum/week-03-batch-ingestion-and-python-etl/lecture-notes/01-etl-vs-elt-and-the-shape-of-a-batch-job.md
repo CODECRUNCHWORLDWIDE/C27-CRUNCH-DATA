@@ -59,6 +59,15 @@ Every batch job, ETL or ELT, decomposes into five stages. Naming them is not ped
 - **Load** merges the transformed rows into the warehouse target with an **upsert** (Lecture 2), so a re-run overwrites rather than appends.
 - **Publish** makes the new state official: advance the watermark *in the same transaction as the load* (Lecture 2), and emit the run's structured log line.
 
+```mermaid
+flowchart LR
+  E["Extract raw rows"] --> S["Stage in landing table"]
+  S --> T["Transform cast dedupe conform"]
+  T --> L["Load upsert into target"]
+  L --> P["Publish advance watermark"]
+```
+*The five stages a batch job passes through, each a distinct place it can fail.*
+
 ## 4. Full vs incremental loads
 
 A **full load** reads the entire source every run and replaces the entire target. It is gorgeously simple and always correct, and it dies the day the source has a hundred million rows: you do not re-read and re-write the whole warehouse every night.
@@ -172,6 +181,19 @@ Two facts that trip up newcomers, both documented on the psycopg transactions pa
 
 1. **The connection `with` block commits on clean exit by default** (`autocommit=False`, the default). If you also use `conn.transaction()`, you get explicit, nested-readable transaction scopes — preferred for ETL because the boundary is visible in the code.
 2. **A connection is not a free-threaded shared object.** One job, one connection. A long-lived *service* uses a connection *pool* (`psycopg_pool.ConnectionPool`) to hand out and reclaim connections; a one-shot batch job does not need one. Use a single `with psycopg.connect(...)` and move on.
+
+```mermaid
+flowchart TD
+  subgraph Conn["Connection with block - closes on exit even on exception"]
+    subgraph Txn["Transaction block - commits on clean exit or rolls back"]
+      C1["TRUNCATE staging"]
+      C2["COPY rows"]
+      C3["Upsert into target"]
+      C1 --> C2 --> C3
+    end
+  end
+```
+*Two nested with scopes: the outer manages the connection lifetime, the inner is the commit or rollback boundary.*
 
 The payoff of wrapping the load in `conn.transaction()` is restartability: if the process dies anywhere inside the block, Postgres rolls the whole batch back, and the next run starts clean. Lecture 2 makes the watermark part of that same transaction so a crash cannot skip data.
 

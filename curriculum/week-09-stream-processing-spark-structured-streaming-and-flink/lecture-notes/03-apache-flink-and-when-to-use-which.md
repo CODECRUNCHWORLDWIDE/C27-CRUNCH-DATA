@@ -19,6 +19,14 @@ A Flink cluster (the "concepts/architecture" doc) has two process roles:
 - **JobManager** — the coordinator. It receives the job graph, schedules tasks onto slots, coordinates checkpoints (it injects the barriers; see §5), and handles recovery. There is one leader JobManager (plus standbys for HA).
 - **TaskManagers** — the workers. Each provides a fixed number of **task slots**; each slot runs a chain of operator subtasks. TaskManagers exchange records with each other directly over the network as data flows through the pipeline. This is where the work happens.
 
+```mermaid
+flowchart TD
+  JM["JobManager - coordinator that schedules tasks and injects checkpoint barriers"] --> TM1["TaskManager - task slots"]
+  JM --> TM2["TaskManager - task slots"]
+  TM1 <--> TM2
+```
+*One JobManager coordinates many TaskManagers, which exchange records directly with each other.*
+
 A Flink program is a **dataflow graph** of operators (source → map → keyBy → window → sink). Unlike Spark — which compiles a query into a *sequence of batch jobs* re-planned every micro-batch — Flink deploys the dataflow graph **once** as a long-running set of operator instances, and records stream through it continuously. There is no batch boundary. A record enters the source operator, flows to the next operator the instant it is ready, and exits at the sink, all without waiting to be batched with its neighbors. This standing-pipeline model is the root of every difference that follows.
 
 ```
@@ -125,6 +133,16 @@ Spark's exactly-once was *checkpointed offsets + idempotent sink* (Lecture 2). F
 **Asynchronous barrier snapshotting** (a variant of the **Chandy–Lamport** distributed-snapshot algorithm; the "learn-flink/fault_tolerance" doc): the JobManager periodically injects a **checkpoint barrier** into the source stream. The barrier flows downstream through the dataflow graph alongside the records. When an operator receives the barrier on all its inputs, it snapshots its own state (the partial window aggregates) to durable storage (the lab uses MinIO/S3) and forwards the barrier. When the barrier reaches all sinks, the JobManager has a globally consistent snapshot — every operator's state as of the same logical point in the stream — **without stopping the pipeline**. That is the "asynchronous" part: records keep flowing while the snapshot is taken. On failure, Flink restores every operator from the last completed snapshot and rewinds the Kafka source to the offsets recorded in it — exactly-once *state* recovery.
 
 For exactly-once *output*, Flink uses **two-phase-commit (2PC) sinks** (`TwoPhaseCommitSinkFunction`): a sink **pre-commits** its writes as part of the checkpoint (phase one, e.g. write to a staging area or open a transaction), and only **commits** them (phase two, make them visible) once the JobManager confirms the *whole* checkpoint completed. If the job fails between pre-commit and commit, recovery either completes or aborts the pending transaction, so each record's output appears exactly once. Kafka sinks (transactional producer), file sinks, and Iceberg/Delta sinks all implement this pattern.
+
+```mermaid
+flowchart TD
+  A["JobManager injects a checkpoint barrier"] --> B["Barrier flows through each operator"]
+  B --> C["Each operator snapshots its state and forwards the barrier"]
+  C --> D["Barrier reaches the sink and it pre-commits"]
+  D --> E["JobManager confirms the whole checkpoint completed"]
+  E --> F["Sink commits and output is visible exactly once"]
+```
+*Asynchronous barrier snapshotting plus two-phase commit, without stopping the pipeline.*
 
 | | Spark Structured Streaming | Apache Flink |
 |---|---|---|

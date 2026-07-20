@@ -67,6 +67,18 @@ A Spark application has three kinds of component (cluster-mode overview, <https:
 
 **Executors** are JVM processes that do the actual work. Each executor is granted a number of **cores** (how many tasks it can run at once) and an amount of **memory** (for caching partitions and for shuffle/aggregation buffers). An executor holds **partitions** of your data and runs **tasks** against them. In `local[*]` mode there is one executor (the driver JVM itself) with as many task slots as you have cores.
 
+```mermaid
+flowchart TD
+  A["Driver runs your script"] --> B["Cluster manager grants resources"]
+  B --> C["Executor 1"]
+  B --> D["Executor 2"]
+  B --> E["Executor 3"]
+  C --> F["Holds partitions, runs tasks"]
+  D --> G["Holds partitions, runs tasks"]
+  E --> H["Holds partitions, runs tasks"]
+```
+*The driver asks the cluster manager for resources; the cluster manager launches executors that hold data and run tasks.*
+
 ---
 
 ## 3. Jobs, stages, tasks — the unit hierarchy
@@ -266,6 +278,16 @@ What happens when `.show()` runs:
    - **Stage 1:** read the shuffle files, do the *reduce-side final aggregation* per `(VendorID, day)`, produce the result. One task per shuffle partition (64, because we set `spark.sql.shuffle.partitions=64`).
 3. The driver dispatches Stage 0's tasks to executor cores; as they finish, Stage 1's tasks read the shuffle output and finish.
 4. `show()` pulls the first 20 rows of the result back to the driver and prints them.
+
+```mermaid
+flowchart LR
+  A["Read Iceberg table"] --> B["Filter trip distance greater than zero"]
+  B --> C["Add day column"]
+  C --> D["Shuffle boundary"]
+  D --> E["Group by VendorID and day, aggregate"]
+  E --> F["Show pulls rows to driver"]
+```
+*Stage 0 covers the narrow steps before the shuffle boundary; Stage 1 covers the aggregate after it.*
 
 You can see exactly this decomposition in the **Spark UI** (Lecture 3) and in the **explain plan** (Lecture 2). For now, run `result.explain(mode="formatted")` and find the line that says `Exchange hashpartitioning(VendorID, day, 64)` — that single line *is* the shuffle, the stage boundary, the network cost, and the thing the rest of the week teaches you to control.
 

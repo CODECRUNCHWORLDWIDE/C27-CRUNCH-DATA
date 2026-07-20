@@ -85,6 +85,18 @@ Three pieces make this work:
 - **`unique_key`** tells dbt how to deduplicate. On an incremental run, dbt does not blindly append — with `unique_key='order_id'` and `delete+insert`, it deletes existing rows whose `order_id` matches the new batch and inserts the new versions. That is an **upsert**, exactly Week 3's merge, and it is what makes a re-run idempotent: re-running the same batch deletes-then-reinserts the same rows, so no double-count.
 - **`incremental_strategy`** picks the mechanism. `dbt-duckdb` supports `append` (fastest, but duplicates on re-run — only safe if your `where` guarantees no overlap), `delete+insert` (delete matching `unique_key`s then insert — robust, the safe default), and `merge` (a single `MERGE` statement where the warehouse supports it).
 
+```mermaid
+flowchart TD
+  A["dbt run on fct_orders"] --> B{"Table exists and not full refresh"}
+  B -->|"No first run"| C["Build full table from stg_orders"]
+  B -->|"Yes"| D["Filter to order_ts newer than max in this"]
+  D --> E["Delete rows matching unique_key"]
+  E --> F["Insert the new rows"]
+  C --> G["Table build complete"]
+  F --> G
+```
+*is_incremental decides whether to build fresh or delete-and-insert only the new rows.*
+
 On the **first** run, `is_incremental()` is false, the `where` clause is omitted, and dbt builds the full table. On **subsequent** runs it is true, only new rows flow, and they are merged on `unique_key`. To rebuild from scratch (after a logic change), `dbt run --select fct_orders --full-refresh` (<https://docs.getdbt.com/docs/build/incremental-models>).
 
 *When right:* large append-mostly fact tables where a full rebuild is too slow. *When wrong:* small tables (just use `table` — simpler and always correct), or tables where most rows change every run (incremental saves nothing).
@@ -236,6 +248,16 @@ dbt adds four metadata columns to the snapshot table, mapping one-to-one onto yo
 | `dbt_updated_at` | — | Timestamp of the snapshot run that recorded this |
 
 "Current" rows are those with `dbt_valid_to is null`. The audit query is identical to Week 1: `where dbt_valid_from <= '2026-03-01' and (dbt_valid_to > '2026-03-01' or dbt_valid_to is null)`.
+
+```mermaid
+stateDiagram-v2
+  [*] --> Current
+  Current --> Superseded: value changes at next dbt snapshot run
+  Superseded --> [*]
+  Current: dbt_valid_to is null
+  Superseded: dbt_valid_to set to change time
+```
+*Every snapshot run either keeps a row current or closes it and opens a new version.*
 
 ### 3.2 The `timestamp` strategy — trust an `updated_at` column
 

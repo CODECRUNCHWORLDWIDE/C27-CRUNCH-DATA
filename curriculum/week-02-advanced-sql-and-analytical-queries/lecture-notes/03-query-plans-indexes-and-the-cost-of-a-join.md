@@ -77,6 +77,15 @@ HashAggregate  (cost=98958.00..98962.50 rows=4 width=40)
 
 Estimates match actuals at every node; the `Hash Join` builds on the 50-row dimension and probes the 5M-row fact. Nothing to fix.
 
+```mermaid
+flowchart BT
+  A["Seq Scan on fact_sales - 5,000,000 rows"] --> C["Hash Join on store_key"]
+  B["Seq Scan on dim_store - 50 rows"] --> H["Hash - build side"]
+  H --> C
+  C --> D["HashAggregate - group by region"]
+```
+*A plan executes bottom to top: the tiny dimension is hashed first, the fact table streams through as the probe side, then the result is grouped.*
+
 **Wrong: a seq scan that should be an index seek.** Now fetch one customer's orders:
 
 ```text
@@ -181,6 +190,19 @@ When a query is slow, in order:
 4. Look for `Sort Method: external merge Disk:` or `Batches: N (N>1)` → a spill; raise `work_mem` for the session or reduce the data sorted/hashed.
 5. Look for a `Nested Loop` with huge `loops` on the inner side → a cardinality explosion; run `ANALYZE`, consider `CREATE STATISTICS`, or index the join key.
 6. Make **one** change, re-run `EXPLAIN ANALYZE`, and compare. Never change two things at once — you will not know which one helped.
+
+```mermaid
+flowchart TD
+  A["Run EXPLAIN ANALYZE BUFFERS"] --> B["Find the node where estimated and actual rows diverge most"]
+  B --> C{"What does that node show"}
+  C -->|"Rows Removed by Filter is huge"| D["Add the missing index"]
+  C -->|"Sort or hash spilled to disk"| E["Raise work_mem or reduce the data sorted"]
+  C -->|"Nested Loop with huge loops"| F["Run ANALYZE, add statistics, or index the join key"]
+  D --> G["Re-run EXPLAIN ANALYZE and compare"]
+  E --> G
+  F --> G
+```
+*The tuning checklist as a decision flow: diagnose the one divergent node, apply the matching fix, then re-measure.*
 
 ## Exercise pointer
 

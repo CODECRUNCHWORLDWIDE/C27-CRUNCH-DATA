@@ -152,6 +152,15 @@ spark = (SparkSession.builder
 
 With all three wired, Marquez shows one continuous graph: the Airflow run that triggered the Spark ingestion that landed `stg_orders`, the dbt models that transformed it, all the way to the model behind the dashboard — across three tools, one map.
 
+```mermaid
+flowchart LR
+  A["Airflow tasks"] --> D["Marquez server"]
+  B["dbt-ol run"] --> D
+  C["Spark OpenLineage listener"] --> D
+  D --> E["Lineage graph UI"]
+```
+*Three producers, one OpenLineage event format, one Marquez graph.*
+
 ---
 
 ## 4. Data catalogs — DataHub and OpenMetadata
@@ -191,6 +200,15 @@ exec_revenue_dashboard (exposure)
             ├─ stg_orders     ← source: raw.orders
             └─ stg_fx_rates   ← source: raw.fx_rates
 ```
+
+```mermaid
+flowchart TD
+  A["exec_revenue_dashboard exposure"] --> B["mart_daily_revenue"]
+  B --> C["int_orders_enriched"]
+  C --> D["stg_orders from raw orders"]
+  C --> E["stg_fx_rates from raw fx_rates"]
+```
+*Table-level lineage walked upstream from the dashboard to the two leaf sources.*
 
 Five candidate nodes. Too many to inspect blind — go to column level.
 
